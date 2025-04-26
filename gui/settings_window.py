@@ -1,64 +1,50 @@
 import tkinter as tk
-from tkinter import ttk, simpledialog, messagebox
+from tkinter import ttk, simpledialog, messagebox, colorchooser, font as tkFont
 from datetime import datetime
 import os
 import sys
 
-# 获取当前脚本的完整路径，用于自启动设置
-# 需要根据应用如何部署来确定真正的启动命令
-if getattr(sys, 'frozen', False):
-    # 如果应用被打包（例如用PyInstaller --onefile 或 --onedir）
-    current_script_path = sys.executable # 可执行文件的路径
-    # 如果是 --onedir 模式，可能还需要cd到可执行文件所在的目录
-    # 但通常执行exe会自动设置工作目录
-    auto_start_command = f'"{current_script_path}"'
-else:
-    # 如果是直接运行 .py 文件
-    # 找到 ddltool.py 的绝对路径
-    # sys.argv[0] 是当前执行的脚本路径 (settings_window.py 或 ddltool.py depending on how run)
-    # 为了稳妥，通过 __file__ 和 os.path 导航到 ddltool.py
-    script_dir = os.path.dirname(os.path.abspath(__file__)) # gui 目录
-    project_dir = os.path.join(script_dir, os.pardir) # ddltool 目录
-    ddltool_script_path = os.path.join(project_dir, 'ddltool.py')
+# Needs tkcalendar: pip install tkcalendar
+from tkcalendar import DateEntry
+# Needs ttkthemes: pip install ttkthemes
+# from ttkthemes import ThemedTk # Not used directly here, used by parent
 
-    # 自启动命令是 python 解释器的路径 加上 ddltool.py 的路径
-    python_exe = sys.executable
-    auto_start_command = f'"{python_exe}" "{ddltool_script_path}"'
-    print(f"Calculated auto-start command (dev mode): {auto_start_command}") # 调试信息
-
-from utils.system_helper import set_auto_start, is_auto_start_enabled
+# Get the command for auto-start (handles script vs frozen mode)
+from utils.system_helper import set_auto_start, is_auto_start_enabled, get_auto_start_command
 
 class SettingsWindow(tk.Toplevel):
     def __init__(self, parent, ddl_items, settings, data_manager):
         tk.Toplevel.__init__(self, parent)
-        self.parent = parent # 保存父窗口引用 (DisplayWindow 实例)
-        # 注意：ddl_items 和 settings 是从 parent 传来的引用，直接修改它们会影响 parent 持有的对象
+        self.parent = parent # Save parent window reference (DisplayWindow instance)
+        # Note: ddl_items and settings are references from parent, direct modifications
+        # will affect parent's objects. This is intended for the "Apply" button.
         self.ddl_items = ddl_items
         self.settings = settings
+
         self.data_manager = data_manager
 
         self.title("DDL 工具设置")
-        # self.geometry("500x400") # 可以设置一个默认大小
-        self.transient(parent) # 让设置窗口成为父窗口的子窗口
-        # self.grab_set() # 设置为模态窗口，阻止与父窗口交互。在父窗口等待时自动实现模态效果。
-        # 使用 wait_window 让父窗口等待更简洁
+        # self.geometry("500x400") # Can set a default size
+        self.transient(parent) # Make settings window a child of parent window
+        self.grab_set() # Make modal, blocks interaction with parent window
+        self.resizable(False, False) # Make window not resizable
 
-        # 使用 Notebook 来组织 DDL 管理和应用设置两个主要区域
+        # Use Notebook to organize DDL management and Application settings areas
         self.notebook = ttk.Notebook(self)
         self.notebook.pack(pady=10, padx=10, expand=True, fill="both")
 
-        # --- DDL 管理 Tab ---
+        # --- DDL Management Tab ---
         self.ddl_frame = ttk.Frame(self.notebook, padding="10")
         self.notebook.add(self.ddl_frame, text='项目管理')
 
-        # DDL 列表显示 (使用 Treeview)
+        # DDL list display (using Treeview)
         self.ddl_tree = ttk.Treeview(self.ddl_frame, columns=('Name', 'DueDate'), show='headings')
         self.ddl_tree.heading('Name', text='项目名称')
         self.ddl_tree.heading('DueDate', text='截止日期')
-        self.ddl_tree.column('Name', width=200)
-        self.ddl_tree.column('DueDate', width=150)
+        self.ddl_tree.column('Name', width=200, anchor='w') # Left aligned
+        self.ddl_tree.column('DueDate', width=150, anchor='center') # Centered
 
-        # 添加滚动条
+        # Add scrollbars
         vsb = ttk.Scrollbar(self.ddl_frame, orient="vertical", command=self.ddl_tree.yview)
         hsb = ttk.Scrollbar(self.ddl_frame, orient="horizontal", command=self.ddl_tree.xview)
         self.ddl_tree.configure(yscrollcommand=vsb.set, xscrollcommand=hsb.set)
@@ -67,72 +53,138 @@ class SettingsWindow(tk.Toplevel):
         hsb.pack(side="bottom", fill="x")
         self.ddl_tree.pack(expand=True, fill="both", side="left")
 
-        # DDL 操作按钮 Frame
+        # DDL operation buttons Frame
         button_frame = ttk.Frame(self.ddl_frame)
         button_frame.pack(side="right", fill="y", padx=5)
 
-        ttk.Button(button_frame, text="新增...", command=self.add_ddl).pack(pady=5)
+        ttk.Button(button_frame, text="新增...", command=self.add_ddl).pack(pady=5, fill="x")
         self.edit_button = ttk.Button(button_frame, text="编辑...", command=self.edit_ddl, state=tk.DISABLED)
-        self.edit_button.pack(pady=5)
+        self.edit_button.pack(pady=5, fill="x")
         self.delete_button = ttk.Button(button_frame, text="删除", command=self.delete_ddl, state=tk.DISABLED)
-        self.delete_button.pack(pady=5)
+        self.delete_button.pack(pady=5, fill="x")
 
-        # 绑定 treeview 选择事件，以便启用编辑/删除按钮
+        # Bind treeview selection event to enable edit/delete buttons
         self.ddl_tree.bind('<<TreeviewSelect>>', self.on_tree_select)
 
-        # 加载初始数据到 Treeview
+        # Load initial data into Treeview
         self._load_ddls_to_treeview()
 
-        # --- 应用设置 Tab ---
+        # --- Application Settings Tab ---
         self.settings_frame = ttk.Frame(self.notebook, padding="10")
-        self.notebook.add(self.settings_frame, text='应用设置')
+        self.notebook.add(self.settings_frame, text='外观设置')
 
-        # 窗口位置/大小设置
-        ttk.Label(self.settings_frame, text="窗口位置 (X坐标, Y坐标):").grid(row=0, column=0, sticky="w", pady=5, padx=5)
+        # Use grid layout for settings area
+        row = 0
+
+        # Window position/size settings
+        ttk.Label(self.settings_frame, text="窗口位置 (X, Y):").grid(row=row, column=0, sticky="w", pady=2, padx=5)
         self.pos_x_entry = ttk.Entry(self.settings_frame)
-        self.pos_x_entry.grid(row=0, column=1, sticky="ew", pady=5, padx=5)
+        self.pos_x_entry.grid(row=row, column=1, sticky="ew", pady=2, padx=5)
         self.pos_y_entry = ttk.Entry(self.settings_frame)
-        self.pos_y_entry.grid(row=0, column=2, sticky="ew", pady=5, padx=5)
+        self.pos_y_entry.grid(row=row, column=2, sticky="ew", pady=2, padx=5)
+        row += 1
 
-        ttk.Label(self.settings_frame, text="窗口大小 (宽度, 高度):").grid(row=1, column=0, sticky="w", pady=5, padx=5)
+        ttk.Label(self.settings_frame, text="窗口大小 (宽, 高):").grid(row=row, column=0, sticky="w", pady=2, padx=5)
         self.size_width_entry = ttk.Entry(self.settings_frame)
-        self.size_width_entry.grid(row=1, column=1, sticky="ew", pady=5, padx=5)
+        self.size_width_entry.grid(row=row, column=1, sticky="ew", pady=2, padx=5)
         self.size_height_entry = ttk.Entry(self.settings_frame)
-        self.size_height_entry.grid(row=1, column=2, sticky="ew", pady=5, padx=5)
+        self.size_height_entry.grid(row=row, column=2, sticky="ew", pady=2, padx=5)
+        row += 1
 
-        # 从 settings 填充当前值
-        self.pos_x_entry.insert(0, str(self.settings.get('window_x', '')))
-        self.pos_y_entry.insert(0, str(self.settings.get('window_y', '')))
-        self.size_width_entry.insert(0, str(self.settings.get('window_width', '')))
-        self.size_height_entry.insert(0, str(self.settings.get('window_height', '')))
+        # Font settings
+        ttk.Label(self.settings_frame, text="字体家族:").grid(row=row, column=0, sticky="w", pady=2, padx=5)
+        # Provide a dropdown list to select system fonts
+        available_fonts = sorted(tkFont.families())
+        self.font_family_combo = ttk.Combobox(self.settings_frame, values=available_fonts, state='readonly')
+        self.font_family_combo.grid(row=row, column=1, columnspan=2, sticky="ew", pady=2, padx=5)
+        row += 1
 
-        # 开机自启动设置
+        ttk.Label(self.settings_frame, text="字体大小:").grid(row=row, column=0, sticky="w", pady=2, padx=5)
+        self.font_size_spinbox = ttk.Spinbox(self.settings_frame, from_=6, to=72, width=5)
+        self.font_size_spinbox.grid(row=row, column=1, sticky="w", pady=2, padx=5)
+        row += 1
+
+        ttk.Label(self.settings_frame, text="字体粗细:").grid(row=row, column=0, sticky="w", pady=2, padx=5)
+        self.font_weight_combo = ttk.Combobox(self.settings_frame, values=('normal', 'bold'), state='readonly', width=8)
+        self.font_weight_combo.grid(row=row, column=1, sticky="w", pady=2, padx=5)
+        row += 1
+
+        # Font color and background color settings
+        ttk.Label(self.settings_frame, text="字体颜色:").grid(row=row, column=0, sticky="w", pady=2, padx=5)
+        self.fg_color_button = ttk.Button(self.settings_frame, text="选择颜色", command=self.choose_fg_color)
+        self.fg_color_button.grid(row=row, column=1, sticky="ew", pady=2, padx=5)
+        # Color preview Label
+        self.fg_color_preview = tk.Label(self.settings_frame, text="■", width=2, relief="sunken")
+        self.fg_color_preview.grid(row=row, column=2, sticky="w", pady=2, padx=5)
+        row += 1
+
+        ttk.Label(self.settings_frame, text="背景颜色:").grid(row=row, column=0, sticky="w", pady=2, padx=5)
+        self.bg_color_button = ttk.Button(self.settings_frame, text="选择颜色", command=self.choose_bg_color)
+        self.bg_color_button.grid(row=row, column=1, sticky="ew", pady=2, padx=5)
+        # Color preview Label
+        self.bg_color_preview = tk.Label(self.settings_frame, text="■", width=2, relief="sunken")
+        self.bg_color_preview.grid(row=row, column=2, sticky="w", pady=2, padx=5)
+        row += 1
+
+        # Transparency setting
+        ttk.Label(self.settings_frame, text="窗口透明度 (0.0-1.0):").grid(row=row, column=0, sticky="w", pady=2, padx=5)
+        self.alpha_spinbox = ttk.Spinbox(self.settings_frame, from_=0.0, to=1.0, increment=0.05, width=5, format="%.2f")
+        self.alpha_spinbox.grid(row=row, column=1, sticky="w", pady=2, padx=5)
+        row += 1
+
+        # Theme setting
+        ttk.Label(self.settings_frame, text="主题:").grid(row=row, column=0, sticky="w", pady=2, padx=5)
+        # Get available themes from the parent (ThemedTk instance)
+        # Wrap in try-except in case ttkthemes is not fully functional or parent is not ThemedTk
+        available_themes = []
+        if hasattr(self.parent, 'get_themes'):
+             try:
+                  available_themes = sorted(self.parent.get_themes())
+             except Exception as e:
+                  print(f"Error getting themes from parent: {e}")
+                  available_themes = ['clam', 'default'] # Provide basic fallbacks
+        else:
+             available_themes = ['clam', 'default'] # Provide basic fallbacks
+
+
+        self.theme_combo = ttk.Combobox(self.settings_frame, values=available_themes, state='readonly')
+        self.theme_combo.grid(row=row, column=1, columnspan=2, sticky="ew", pady=2, padx=5)
+        row += 1
+
+
+        # Auto-start setting
         self.auto_start_var = tk.BooleanVar()
-        # 检查当前是否已设置自启动，初始化 Checkbutton
-        self.auto_start_var.set(is_auto_start_enabled("DDLTool", auto_start_command)) # "DDLTool" 是注册表键名
+        # Checkbutton variable is linked in _load_current_settings_to_gui
+        self.auto_start_check = ttk.Checkbutton(self.settings_frame, text="开机自启动")
+        self.auto_start_check.grid(row=row, column=0, columnspan=3, sticky="w", pady=10, padx=5)
+        row += 1
 
-        self.auto_start_check = ttk.Checkbutton(self.settings_frame, text="开机自启动", variable=self.auto_start_var)
-        self.auto_start_check.grid(row=2, column=0, columnspan=3, sticky="w", pady=10, padx=5)
 
-        # 配置列的权重，使Entry控件随窗口拉伸
+        # Configure column weights to make Entry/Combobox widgets expand
         self.settings_frame.grid_columnconfigure(1, weight=1)
         self.settings_frame.grid_columnconfigure(2, weight=1)
 
-        # --- 底部操作按钮 ---
+        # --- Populate GUI with current settings ---
+        self._load_current_settings_to_gui()
+
+        # --- Bottom operation buttons ---
         bottom_button_frame = ttk.Frame(self)
         bottom_button_frame.pack(pady=10)
 
-        # 添加“应用”按钮
+        # Add "Apply" button
         ttk.Button(bottom_button_frame, text="应用", command=self.apply_settings_preview).pack(side="left", padx=5)
         ttk.Button(bottom_button_frame, text="保存并关闭", command=self.save_and_close).pack(side="left", padx=5)
         ttk.Button(bottom_button_frame, text="取消", command=self.cancel_and_close).pack(side="left", padx=5)
 
-        # 处理窗口关闭事件 (点击X按钮)
+        # Handle window closing event (clicking the X button)
         self.protocol("WM_DELETE_WINDOW", self.cancel_and_close)
 
-        # 在对话框打开时，获取并显示主窗口的当前实际位置和大小
-        # 这样做的好处是，如果用户在打开设置前拖动了主窗口，设置窗口会显示最新的位置
-        current_geo = self.parent.get_current_settings()
+
+    def _load_current_settings_to_gui(self):
+        # Load settings from self.settings dictionary into GUI controls
+        # Window position/size gets actual current values from parent window, others from settings dict
+        current_geo = self.parent.get_current_settings() # Get actual current settings from main window
+
         self.pos_x_entry.delete(0, tk.END)
         self.pos_x_entry.insert(0, str(current_geo.get('window_x', '')))
         self.pos_y_entry.delete(0, tk.END)
@@ -142,24 +194,74 @@ class SettingsWindow(tk.Toplevel):
         self.size_height_entry.delete(0, tk.END)
         self.size_height_entry.insert(0, str(current_geo.get('window_height', '')))
 
+        # Font settings
+        font_family = self.settings.get('font_family', 'Arial')
+        if font_family in self.font_family_combo['values']:
+             self.font_family_combo.set(font_family)
+        else:
+             # If saved font is not available, use default 'Arial' or the first available
+             if 'Arial' in self.font_family_combo['values']:
+                  self.font_family_combo.set('Arial')
+             elif self.font_family_combo['values']:
+                  self.font_family_combo.set(self.font_family_combo['values'][0])
+
+
+        self.font_size_spinbox.set(self.settings.get('font_size', 10))
+
+        font_weight = self.settings.get('font_weight', 'normal')
+        if font_weight in self.font_weight_combo['values']:
+             self.font_weight_combo.set(font_weight)
+        else:
+             self.font_weight_combo.set('normal')
+
+
+        # Color settings
+        fg_color = self.settings.get('fg_color', 'white')
+        bg_color = self.settings.get('bg_color', 'black')
+        # Validate color strings? Tkinter usually handles valid color names or #RRGGBB
+        self.fg_color_preview.config(bg=fg_color)
+        self.bg_color_preview.config(bg=bg_color)
+
+        # Transparency
+        self.alpha_spinbox.set(self.settings.get('alpha', 1.0))
+
+        # Theme
+        theme_name = self.settings.get('theme', 'arc')
+        if theme_name in self.theme_combo['values']:
+             self.theme_combo.set(theme_name)
+        elif self.theme_combo['values']:
+             self.theme_combo.set(self.theme_combo['values'][0]) # Fallback to first available theme
+        else:
+             self.theme_combo.set('') # No themes available?
+
+
+        # Auto-start setting
+        auto_start_cmd = get_auto_start_command() # Get the correct command for current execution mode
+        self.auto_start_var.set(is_auto_start_enabled("DDLTool", auto_start_cmd))
+        self.auto_start_check.config(variable=self.auto_start_var) # Associate variable with Checkbutton
+
 
     def _load_ddls_to_treeview(self):
-        # 清空 Treeview
+        # Clear Treeview
         for i in self.ddl_tree.get_children():
             self.ddl_tree.delete(i)
 
-        # 插入新数据
-        # 按照日期排序再插入
-        sorted_ddls = sorted(self.ddl_items, key=lambda x: x.get('date', ''))
+        # Insert new data
+        # Sort by date
+        # Filter out items that are not dictionaries or missing keys before sorting
+        valid_ddl_items = [item for item in self.ddl_items if isinstance(item, dict) and 'name' in item and 'date' in item]
+
+        sorted_ddls = sorted(valid_ddl_items, key=lambda x: x.get('date', '')) # Use empty string as default key for missing dates
 
         for item in sorted_ddls:
-             # item 的格式假设是 {"name": "...", "date": "..."}
-             # 使用 item 本身作为 iid，方便后续查找和修改（如果item是唯一标识的话）
-             # 或者使用一个稳定的ID，这里继续使用 item 的值作为展示
-             self.ddl_tree.insert('', tk.END, values=(item.get('name', '未命名项目'), item.get('date', '未设置日期')))
+             # item format: {"name": "...", "date": "..."}
+             # Store the original item dictionary reference as the item's tag.
+             # This makes it easy to retrieve the original data object for editing/deletion.
+             self.ddl_tree.insert('', tk.END, values=(item.get('name', '未命名项目'), item.get('date', '未设置日期')), tags=(item,))
+
 
     def on_tree_select(self, event):
-        # 如果有项目被选中，启用编辑和删除按钮
+        # If an item is selected, enable edit and delete buttons
         selected_items = self.ddl_tree.selection()
         if selected_items:
             self.edit_button.config(state=tk.NORMAL)
@@ -169,26 +271,22 @@ class SettingsWindow(tk.Toplevel):
             self.delete_button.config(state=tk.DISABLED)
 
     def get_selected_ddl_data(self):
-        # 获取 Treeview 中选中项对应的原始数据
+        # Get the original data object for the selected item (using tag)
         selected_items = self.ddl_tree.selection()
         if not selected_items:
             return None
 
-        # 获取选中项在 Treeview 中显示的值
         item_id = selected_items[0]
-        item_values = self.ddl_tree.item(item_id, 'values')
-        selected_name = item_values[0]
-        selected_date_str = item_values[1]
+        # Retrieve the tag, which is the original dictionary object
+        # Check if tags exist and are not empty
+        tags = self.ddl_tree.item(item_id, 'tags')
+        if tags and tags[0]:
+            return tags[0] # Return the stored object reference
+        return None # No valid tag found
 
-        # 在原始 self.ddl_items 列表中查找匹配项
-        # 注意：这里假设 name 和 date 的组合能唯一标识一个项目，如果不能，需要更强的ID机制
-        for item in self.ddl_items:
-             if item.get('name') == selected_name and item.get('date') == selected_date_str:
-                  return item # 返回原始数据对象
-        return None # 未找到匹配项
 
     def add_ddl(self):
-         # 打开添加/编辑对话框，不传递当前项目数据
+         # Open add/edit dialog, without passing existing item data
          self._open_add_edit_dialog()
 
     def edit_ddl(self):
@@ -196,125 +294,221 @@ class SettingsWindow(tk.Toplevel):
          if original_item_data:
              self._open_add_edit_dialog(original_item_data)
          else:
-             messagebox.showerror("错误", "无法找到选中的项目数据。")
+             messagebox.showwarning("提示", "请先在列表中选择一个项目进行编辑。")
 
     def delete_ddl(self):
          selected_items = self.ddl_tree.selection()
          if not selected_items:
+             messagebox.showwarning("提示", "请先在列表中选择一个项目进行删除。")
              return
 
          original_item_data = self.get_selected_ddl_data()
          if not original_item_data:
-             messagebox.showerror("错误", "无法找到要删除的项目数据。")
+             messagebox.showerror("错误", "无法找到要删除的项目数据。") # Should not happen if get_selected_ddl_data works
              return
 
          if messagebox.askyesno("确认删除", f"确定要删除项目 '{original_item_data.get('name', '未命名')}' 吗？"):
              try:
-                  self.ddl_items.remove(original_item_data) # 直接从列表中移除该对象
-                  self._load_ddls_to_treeview() # 刷新 Treeview
-                  self.on_tree_select(None) # 更新按钮状态
-                  messagebox.showinfo("成功", "项目已删除。")
+                  # Find the exact object reference in the original list and remove it
+                  # Using item_data reference directly assumes it's still in the list
+                  self.ddl_items.remove(original_item_data) # Remove by object identity
+
+                  self._load_ddls_to_treeview() # Refresh Treeview display
+                  self.on_tree_select(None) # Update button states (disables Edit/Delete)
+                  # messagebox.showinfo("成功", "项目已删除（需保存设置生效）。")
              except ValueError:
-                  messagebox.showerror("错误", "删除项目失败。")
+                  messagebox.showerror("错误", "删除项目失败：在数据列表中未找到匹配项。") # Indicates an issue with the item reference
+             except Exception as e:
+                  messagebox.showerror("错误", f"删除项目失败: {e}")
 
     def _open_add_edit_dialog(self, item_data=None):
-        # 这个方法会创建一个新的 Toplevel 作为对话框
         dialog = AddEditDDLDialog(self, item_data)
-        # 等待对话框关闭
+        # wait_window makes the dialog modal and blocks here until dialog is destroyed
         self.wait_window(dialog)
 
-        # 对话框关闭后，检查是否有返回的数据
+        # After dialog closes, check if result was set (Save button was clicked)
         if hasattr(dialog, 'result') and dialog.result:
-             new_item_data = dialog.result # 格式 {"name": "...", "date": "..."}
+             new_item_data = dialog.result # Format: {"name": "...", "date": "..."}
 
-             if item_data is None: # 这是添加操作
+             if item_data is None: # This was an Add operation
                  self.ddl_items.append(new_item_data)
-                 messagebox.showinfo("成功", "项目已新增。")
-             else: # 这是编辑操作
-                 # 找到原始 item_data 在列表中的位置并更新
+                 messagebox.showinfo("成功", "项目已新增（需保存设置生效）。")
+             else: # This was an Edit operation
+                 # Find the original item in the list by reference and update it
                  try:
-                      index = self.ddl_items.index(item_data) # 找到旧数据的位置
-                      self.ddl_items[index] = new_item_data # 用新数据替换
-                      messagebox.showinfo("成功", "项目已更新。")
+                      # index() finds the position of the exact object reference
+                      index = self.ddl_items.index(item_data)
+                      self.ddl_items[index] = new_item_data # Replace old object with new data object
+                      messagebox.showinfo("成功", "项目已更新（需保存设置生效）。")
                  except ValueError:
-                      messagebox.showerror("错误", "更新项目失败。")
+                      messagebox.showerror("错误", "更新项目失败：在数据列表中未找到原始项目。") # Indicates an issue with the item reference
+                 except Exception as e:
+                     messagebox.showerror("错误", f"更新项目失败: {e}")
 
-             self._load_ddls_to_treeview() # 刷新列表显示
-             self.on_tree_select(None) # 更新按钮状态
-             # 不需要在这里保存到文件，保存由主窗口关闭或 Save 按钮处理
+
+             self._load_ddls_to_treeview() # Refresh Treeview display
+             self.on_tree_select(None) # Update button states (disables Edit/Delete)
+
+
+    def choose_fg_color(self):
+        # Open color chooser, returns (RGB tuple, #HEX string)
+        initial_color = self.fg_color_preview.cget('bg') # Get current color for initial display
+        color_code = colorchooser.askcolor(color=initial_color, title="选择字体颜色")
+        if color_code and color_code[1]: # If user selected a color and didn't cancel
+            selected_color_hex = color_code[1]
+            self.fg_color_preview.config(bg=selected_color_hex)
+
+    def choose_bg_color(self):
+        # Open color chooser, returns (RGB tuple, #HEX string)
+        initial_color = self.bg_color_preview.cget('bg') # Get current color
+        color_code = colorchooser.askcolor(color=initial_color, title="选择背景颜色")
+        if color_code and color_code[1]: # If user selected a color and didn't cancel
+            selected_color_hex = color_code[1]
+            self.bg_color_preview.config(bg=selected_color_hex)
+
 
     def apply_settings_from_gui(self):
-         # 从 Entry 控件读取窗口设置并更新到 self.settings 字典 (不保存到文件)
+         # Read settings from GUI controls and update self.settings dictionary (does NOT save to file)
+         updated_settings = self.settings.copy() # Create a copy to modify
+         valid_input = True
+
+         # Window position and size
          try:
-             new_x = int(self.pos_x_entry.get())
-             new_y = int(self.pos_y_entry.get())
-             new_width = int(self.size_width_entry.get())
-             new_height = int(self.size_height_entry.get())
-
-             # 更新 self.settings 字典
-             self.settings['window_x'] = new_x
-             self.settings['window_y'] = new_y
-             self.settings['window_width'] = new_width
-             self.settings['window_height'] = new_height
-
-             return True # 应用成功
+             updated_settings['window_x'] = int(self.pos_x_entry.get())
+             updated_settings['window_y'] = int(self.pos_y_entry.get())
+             updated_settings['window_width'] = int(self.size_width_entry.get())
+             updated_settings['window_height'] = int(self.size_height_entry.get())
+             # Basic validation for size
+             if updated_settings['window_width'] <= 0 or updated_settings['window_height'] <= 0:
+                  messagebox.showwarning("输入错误", "窗口大小必须大于零。")
+                  valid_input = False
          except ValueError:
-             messagebox.showwarning("输入错误", "窗口位置或大小输入无效，请确保输入数字。")
-             # 清空输入框或重新填充当前值，以提示用户
-             current_geo = self.parent.get_current_settings()
-             self.pos_x_entry.delete(0, tk.END)
-             self.pos_x_entry.insert(0, str(current_geo.get('window_x', '')))
-             self.pos_y_entry.delete(0, tk.END)
-             self.pos_y_entry.insert(0, str(current_geo.get('window_y', '')))
-             self.size_width_entry.delete(0, tk.END)
-             self.size_width_entry.insert(0, str(current_geo.get('window_width', '')))
-             self.size_height_entry.delete(0, tk.END)
-             self.size_height_entry.insert(0, str(current_geo.get('window_height', '')))
+             messagebox.showwarning("输入错误", "窗口位置或大小输入无效，请确保输入整数。")
+             valid_input = False
 
-             return False # 应用失败
+         # Font settings
+         selected_font_family = self.font_family_combo.get()
+         if selected_font_family: # Ensure a font is selected
+             updated_settings['font_family'] = selected_font_family
+         else:
+             messagebox.showwarning("输入错误", "请选择一个字体家族。")
+             valid_input = False
+
+         selected_font_weight = self.font_weight_combo.get()
+         if selected_font_weight in ('normal', 'bold'): # Explicitly check valid weights
+             updated_settings['font_weight'] = selected_font_weight
+         else:
+              messagebox.showwarning("输入错误", "请选择字体粗细 (normal 或 bold)。")
+              valid_input = False
+
+         try:
+             font_size = int(self.font_size_spinbox.get())
+             if font_size > 0:
+                  updated_settings['font_size'] = font_size
+             else:
+                 messagebox.showwarning("输入错误", "字体大小必须大于零。")
+                 valid_input = False
+         except ValueError:
+              messagebox.showwarning("输入错误", "字体大小输入无效，请确保输入整数。")
+              valid_input = False
+
+
+         # Color settings (read from the background color of the preview Labels)
+         updated_settings['fg_color'] = self.fg_color_preview.cget('bg')
+         updated_settings['bg_color'] = self.bg_color_preview.cget('bg')
+
+         # Transparency setting
+         try:
+             alpha_value = float(self.alpha_spinbox.get())
+             if 0.0 <= alpha_value <= 1.0:
+                 updated_settings['alpha'] = alpha_value
+             else:
+                 messagebox.showwarning("输入错误", "透明度必须在 0.0 到 1.0 之间。")
+                 valid_input = False
+         except ValueError:
+              messagebox.showwarning("输入错误", "透明度输入无效，请确保输入数字。")
+              valid_input = False
+
+         # Theme setting
+         selected_theme = self.theme_combo.get()
+         if selected_theme and selected_theme in self.theme_combo['values']:
+             updated_settings['theme'] = selected_theme
+         else:
+              messagebox.showwarning("输入错误", "请选择一个有效的主题。")
+              valid_input = False
+
+
+         if valid_input:
+             # If all inputs are valid, update the self.settings dictionary with the new values
+             self.settings.update(updated_settings)
+             return True # Applied settings successfully
+         else:
+              # If validation failed, revert GUI inputs to current self.settings values (before invalid input)
+              self._load_current_settings_to_gui() # Revert GUI to current self.settings state
+              return False # Failed to apply settings due to invalid input
+
 
     def apply_settings_preview(self):
-        # “应用”按钮功能：更新 settings 字典并让主窗口应用这些设置，但不保存到文件
-        if self.apply_settings_from_gui(): # 先从GUI读取并更新到 self.settings
-             # 调用父窗口的方法来应用这些设置
-             self.parent.apply_settings(self.settings)
-             # messagebox.showinfo("应用成功", "设置已应用，但尚未保存。") # 可以选择提示
+        # "Apply" button function: updates settings dict and makes the parent window apply them, but does NOT save to file
+        if self.apply_settings_from_gui(): # First, read from GUI and update self.settings
+             # Call parent window methods to apply these settings
+             # Set theme first as it might affect how other settings are applied
+             try:
+                  # Assuming parent has a set_theme method from ThemedTk
+                  self.parent.set_theme(self.settings.get('theme', 'arc'))
+             except Exception as e:
+                  print(f"Warning: Failed to apply theme '{self.settings.get('theme', 'arc')}' in preview: {e}")
+                  # Fallback if theme application fails
+                  try:
+                       self.parent.set_theme('clam')
+                       self.settings['theme'] = 'clam' # Update settings to reflect fallback
+                       messagebox.showwarning("主题错误", "选定的主题加载失败，已应用默认主题。")
+                       self._load_current_settings_to_gui() # Refresh GUI with fallback theme
+                  except Exception as e2:
+                       print(f"Warning: Fallback theme 'clam' also failed: {e2}")
+                       messagebox.showwarning("主题错误", "无法加载任何主题。")
+
+
+             self.parent.apply_settings(self.settings) # Apply other settings (geometry, color, font, alpha)
+             # messagebox.showinfo("应用成功", "设置已应用，但尚未保存。") # Can optionally show a message
 
     def save_and_close(self):
-        # “保存并关闭”按钮功能：应用设置，保存所有数据到文件，处理自启动，然后关闭窗口
-        if self.apply_settings_from_gui(): # 先从GUI读取并更新到 self.settings
-             # 处理自启动设置
+        # "Save and Close" button function: apply settings, save all data to files, handle auto-start, then close window
+        if self.apply_settings_from_gui(): # First, read from GUI and update self.settings
+             # Process auto-start setting
              auto_start_enabled = self.auto_start_var.get()
-             set_auto_start("DDLTool", auto_start_command, auto_start_enabled)
-             # 更新 self.settings 字典中的 auto_start 状态，以便保存到文件
+             current_auto_start_command = get_auto_start_command() # Get the correct command for current execution mode
+             set_auto_start("DDLTool", current_auto_start_command, auto_start_enabled)
+             # Update the auto_start state in self.settings dictionary to be saved
              self.settings['auto_start'] = auto_start_enabled
 
-             # 保存 DDL 项目和设置到文件
+
+             # Save DDL items and settings to files
              self.data_manager.save_ddl_items(self.ddl_items)
              self.data_manager.save_settings(self.settings)
 
-             # 调用父窗口方法应用设置，确保即使没点“应用”也能在保存时看到效果
+             # Call parent window methods to apply settings one last time before closing
+             # Set theme first
+             try:
+                  self.parent.set_theme(self.settings.get('theme', 'arc'))
+             except Exception as e:
+                  print(f"Warning: Failed to apply theme '{self.settings.get('theme', 'arc')}' on save: {e}")
+                  try: self.parent.set_theme('clam')
+                  except: pass # Ignore if even fallback fails
+
+
              self.parent.apply_settings(self.settings)
 
              messagebox.showinfo("保存成功", "设置和项目已保存。")
-             self.destroy() # 关闭窗口
-        # else: apply_settings_from_gui 会显示错误，不关闭窗口
+             self.destroy() # Close the window
+        # else: apply_settings_from_gui will show error, window stays open
 
     def cancel_and_close(self):
-        # “取消”按钮功能：不保存，直接关闭窗口
-        # 因为 ddl_items 和 settings 是引用，取消时需要恢复它们
-        # 简单的做法是，取消时不恢复数据，只关闭窗口。
-        # 如果用户在 settings 窗口做了修改但没点保存，这些修改会留在内存中，直到程序关闭。
-        # 更好的做法是在打开 settings 窗口时复制一份 ddl_items 和 settings，保存时再决定是否覆盖原引用。
-        # 为了简化，我们假定用户点击取消时不希望任何修改（包括DDL修改）生效。
-        # 这意味着需要在打开SettingsWindow时复制数据，并在取消时丢弃副本。
-
-        # 简单处理：直接关闭。如果用户在里面修改了DDL，这些修改仍在self.ddl_items里（因为是引用）。
-        # 除非点击保存，否则不会写入文件。主窗口下次加载会是旧数据。
-        # 对于应用设置（位置/大小），如果点了“应用”但没点“保存”，主窗口当前是新设置，但文件里是旧的。
-        # 下次启动会加载旧的设置。
-
-        # 模态窗口由父窗口的 wait_window 管理，这里只需 destroy
+        # "Cancel" button function: does NOT save to files, just closes the window
+        # Changes made to ddl_items and settings (which are references) will persist in the parent's objects in memory.
+        # Only the *file* save is skipped.
+        # Applied settings preview will remain visible in the main window until application restart.
+        self.grab_release() # Release modal grab
         self.destroy()
 
 
@@ -323,8 +517,8 @@ class AddEditDDLDialog(tk.Toplevel):
     def __init__(self, parent, item_data=None):
         tk.Toplevel.__init__(self, parent)
         self.parent = parent
-        self.item_data = item_data # 如果是编辑，传入已有的数据
-        self.result = None # 用于存放返回的数据 {"name": ..., "date": ...}
+        self.item_data = item_data # If editing, pass existing data
+        self.result = None # Used to store the result {"name": ..., "date": ...}
 
         if item_data:
              self.title("编辑项目")
@@ -332,39 +526,66 @@ class AddEditDDLDialog(tk.Toplevel):
              self.title("新增项目")
 
         self.transient(parent)
-        self.grab_set() # 模态对话框，阻止与父窗口交互
+        self.grab_set() # Modal dialog
+        self.resizable(False, False) # Dialog not resizable
+        self.attributes('-topmost', True) # <--- FIX: Force this dialog to stay on top
 
         # --- Input Fields ---
         form_frame = ttk.Frame(self, padding="10")
         form_frame.pack(expand=True, fill="both")
 
+        # 项目名称
         ttk.Label(form_frame, text="项目名称:").grid(row=0, column=0, sticky="w", pady=5, padx=5)
         self.name_entry = ttk.Entry(form_frame, width=40)
-        self.name_entry.grid(row=0, column=1, sticky="ew", pady=5, padx=5)
+        self.name_entry.grid(row=0, column=1, columnspan=2, sticky="ew", pady=5, padx=5)
 
-        ttk.Label(form_frame, text="截止日期 (YYYY-MM-DD):").grid(row=1, column=0, sticky="w", pady=5, padx=5)
-        self.date_entry = ttk.Entry(form_frame, width=20)
-        self.date_entry.grid(row=1, column=1, sticky="ew", pady=5, padx=5)
+        # 截止日期 (使用 tkcalendar 的 DateEntry)
+        ttk.Label(form_frame, text="截止日期:").grid(row=1, column=0, sticky="w", pady=5, padx=5)
+        # locale='zh_CN' If system supports Chinese locale, might show Chinese calendar
+        # date_pattern ensures saved string format is correct
+        self.date_entry = DateEntry(form_frame, selectmode='day', date_pattern='yyyy-mm-dd', locale='zh_CN', font='Arial 10')
+        self.date_entry.grid(row=1, column=1, columnspan=2, sticky="ew", pady=5, padx=5)
 
-        ttk.Label(form_frame, text="截止时间 (HH:MM):").grid(row=2, column=0, sticky="w", pady=5, padx=5)
-        self.time_entry = ttk.Entry(form_frame, width=10)
-        self.time_entry.grid(row=2, column=1, sticky="ew", pady=5, padx=5)
+        # 截止时间 (使用 Spinbox 选择小时和分钟)
+        ttk.Label(form_frame, text="截止时间:").grid(row=2, column=0, sticky="w", pady=5, padx=5)
 
-        # 如果是编辑模式，填充数据
+        time_frame = ttk.Frame(form_frame) # Use a Frame to contain hour and minute spinboxes
+        time_frame.grid(row=2, column=1, columnspan=2, sticky="w", pady=5, padx=5)
+
+        # Use values for fixed selection, or from_/to_/increment for range
+        # format="%02.0f" ensures two digits with leading zero
+        self.hour_spinbox = ttk.Spinbox(time_frame, from_=0, to=23, width=3, format="%02.0f", wrap=True) # wrap=True cycles at max/min
+        self.hour_spinbox.pack(side="left")
+        ttk.Label(time_frame, text=":").pack(side="left") # Separator
+        self.minute_spinbox = ttk.Spinbox(time_frame, from_=0, to=59, width=3, format="%02.0f", wrap=True)
+        self.minute_spinbox.pack(side="left")
+
+        # If editing mode, populate fields with existing data
         if item_data:
              self.name_entry.insert(0, item_data.get('name', ''))
-             # 尝试解析日期，分割日期和时间填充
+             # Attempt to parse datetime string and populate DateEntry and Spinboxes
              try:
-                 # 假设 item_data['date'] 格式是 'YYYY-MM-DD HH:MM'
                  dt_str = item_data.get('date', '')
                  if dt_str:
                      dt_obj = datetime.strptime(dt_str, '%Y-%m-%d %H:%M')
-                     self.date_entry.insert(0, dt_obj.strftime('%Y-%m-%d'))
-                     self.time_entry.insert(0, dt_obj.strftime('%H:%M'))
-             except (ValueError, TypeError):
-                 # 如果解析失败，保持为空，或者显示原始字符串提示用户
-                 self.date_entry.insert(0, item_data.get('date', ''))
-                 pass
+                     # Populate DateEntry
+                     self.date_entry.set_date(dt_obj.date()) # set_date() takes a datetime.date object
+                     # Populate time spinboxes
+                     self.hour_spinbox.set(f"{dt_obj.hour:02d}") # set() takes a string
+                     self.minute_spinbox.set(f"{dt_obj.minute:02d}")
+                 else:
+                      # If date string is empty or invalid, set default date (e.g., today) and time
+                      self.date_entry.set_date(datetime.now().date()) # Default to today
+                      self.hour_spinbox.set("00")
+                      self.minute_spinbox.set("00")
+
+             except (ValueError, TypeError) as e:
+                 print(f"Error parsing item date for editing: {e}")
+                 messagebox.showwarning("日期解析错误", f"无法解析项目 '{item_data.get('name', '未命名')}' 的原始日期格式，请重新设置。\n原始日期: {item_data.get('date', '无')}")
+                 # Set default values to allow user to re-enter
+                 self.date_entry.set_date(datetime.now().date())
+                 self.hour_spinbox.set("00")
+                 self.minute_spinbox.set("00")
 
 
         # --- Buttons ---
@@ -374,37 +595,71 @@ class AddEditDDLDialog(tk.Toplevel):
         ttk.Button(button_frame, text="保存", command=self.on_save).pack(side="left", expand=True, padx=5)
         ttk.Button(button_frame, text="取消", command=self.on_cancel).pack(side="left", expand=True, padx=5)
 
-        # 使对话框模态
+        # Make the dialog modal
         self.protocol("WM_DELETE_WINDOW", self.on_cancel)
-        self.name_entry.focus_set() # 聚焦到名称输入框
+        self.name_entry.focus_set() # Set focus to the name entry field
+
+        # Center the dialog over its parent window
+        self.update_idletasks() # Ensure window dimensions are calculated
+        parent_x = parent.winfo_x()
+        parent_y = parent.winfo_y()
+        parent_width = parent.winfo_width()
+        parent_height = parent.winfo_height()
+        dialog_width = self.winfo_width()
+        dialog_height = self.winfo_height()
+
+        # Calculate center position
+        center_x = parent_x + (parent_width // 2) - (dialog_width // 2)
+        center_y = parent_y + (parent_height // 2) - (dialog_height // 2)
+
+        self.geometry(f'+{center_x}+{center_y}')
+
 
     def on_save(self):
         name = self.name_entry.get().strip()
-        date_str = self.date_entry.get().strip()
-        time_str = self.time_entry.get().strip()
 
-        if not name or not date_str or not time_str:
-             messagebox.showwarning("输入错误", "项目名称、日期和时间都不能为空。")
+        # Get the selected date
+        try:
+            selected_date_obj = self.date_entry.get_date() # Returns a datetime.date object
+            date_str = selected_date_obj.strftime('%Y-%m-%d') # Format as YYYY-MM-DD
+        except Exception as e:
+             messagebox.showwarning("输入错误", f"获取日期时出错: {e}")
              return
 
-        # 验证日期和时间格式
-        datetime_str_input = f"{date_str} {time_str}"
+        # Get and validate time
         try:
-             # 检查格式是否精确匹配
-             datetime.strptime(datetime_str_input, '%Y-%m-%d %H:%M')
-             # 如果解析成功，使用标准的 YYYY-MM-DD HH:MM 格式保存
-             valid_datetime_str = datetime_str_input # 格式是正确的
+             hour_str = self.hour_spinbox.get()
+             minute_str = self.minute_spinbox.get()
+             # Attempt to convert to integer to validate
+             hour = int(hour_str)
+             minute = int(minute_str)
+             # Check range explicitly (Spinbox range is a soft limit if manual input is possible)
+             if not (0 <= hour <= 23 and 0 <= minute <= 59):
+                 raise ValueError("Hour or minute out of range")
+
+             time_str = f"{hour:02d}:{minute:02d}" # Format as HH:MM
 
         except ValueError:
-             messagebox.showwarning("输入错误", "日期或时间格式无效。请使用 YYYY-MM-DD 和 HH:MM 格式。")
+             messagebox.showwarning("输入错误", "时间输入无效，请确保小时和分钟是有效的数字。")
+             return
+        except Exception as e:
+             messagebox.showwarning("输入错误", f"获取时间时出错: {e}")
              return
 
-        # 数据有效，保存结果并关闭
-        self.result = {"name": name, "date": valid_datetime_str}
-        self.grab_release() # 释放模态抓取
+
+        if not name:
+             messagebox.showwarning("输入错误", "项目名称不能为空。")
+             return
+
+        # Combine date and time string in the required format 'YYYY-MM-DD HH:MM'
+        datetime_str_to_save = f"{date_str} {time_str}"
+
+        # Data is valid, store result and close
+        self.result = {"name": name, "date": datetime_str_to_save}
+        self.grab_release() # Release modal grab
         self.destroy()
 
     def on_cancel(self):
-        self.result = None # 取消操作，不返回数据
-        self.grab_release() # 释放模态抓取
+        self.result = None # Cancel operation, no data returned
+        self.grab_release() # Release modal grab
         self.destroy()
