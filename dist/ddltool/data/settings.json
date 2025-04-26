@@ -1,0 +1,14 @@
+{
+    "window_x": 1540,
+    "window_y": 0,
+    "window_width": 510,
+    "window_height": 200,
+    "auto_start": false,
+    "font_family": "Arial",
+    "font_size": 15,
+    "font_weight": "normal",
+    "fg_color": "white",
+    "bg_color": "#000000",
+    "alpha": 0.8,
+    "theme": "xpnative"
+}
