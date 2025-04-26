@@ -1,7 +1,13 @@
 # ddltool
 > 一款 Windows 桌面端的简易 DDL 截止时间计时小工具。
 >
-> 基于 Python 开发，使用 pyinstaller 打包完成。
+> 基于 Python 开发，使用 pyinstaller 封装完成。
+
+
+
+![bf8a8f9c8b120d10c633c14c447db6e7.png](https://pic.awa.ms/f/2025/04/26/680cf411f1417.png)
+![203a71e02d6df42f57d55261263b1c30.png](https://pic.awa.ms/f/2025/04/26/680cf41282957.png)
+![6858e66a647ad0922f1b63055f5fab30.png](https://pic.awa.ms/f/2025/04/26/680cf41302634.png)
 
 
 
