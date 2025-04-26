@@ -120,4 +120,4 @@ python -m PyInstaller --windowed --onedir --add-data "data;data" --icon="icon.ic
 
 ## 📝 许可证
 
-该项目已获得许可。有关详细信息，请参阅 [LICENSE](https://github.com/LYOfficial/ddltool/blob/main/repositorio/LICENSE.md) 文件。
+该项目已获得许可。有关详细信息，请参阅 [LICENSE](https://github.com/LYOfficial/ddltool/blob/main/LICENSE) 文件。
